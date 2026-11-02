@@ -4,7 +4,7 @@
 .entry { min-height: calc(100vh - 140px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
 .entry-card { width: min(460px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 28px; padding: 36px 32px 28px; box-shadow: 0 24px 48px -28px rgba(16, 24, 40, 0.22); text-align: center; }
 .entry-brand { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 28px; }
-.entry-brand .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; background: var(--blueberry); border-radius: 11px; }
+.entry-mark { width: 38px; height: 38px; display: grid; place-items: center; background: var(--blueberry); border-radius: 11px; }
 .entry-brand b { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
 .entry-card h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; max-width: 16ch; margin: 0 auto; }
 .lede { font-size: 15px; line-height: 1.55; color: var(--ink-3); max-width: 34ch; margin: 10px auto 0; }
@@ -18,8 +18,8 @@
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
 .side-tile { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; }
-.side-tile.owner { background: var(--blueberry-tint); color: var(--blueberry); }
-.side-tile.customer { background: var(--glaze-tint); color: var(--glaze); }
+.side-tile.tile-owner { background: var(--blueberry-tint); color: var(--blueberry); }
+.side-tile.tile-customer { background: var(--glaze-tint); color: var(--glaze); }
 .side-text b { display: block; font-weight: 600; font-size: 15px; }
 .side-text small { display: block; color: var(--ink-3); font-size: 13px; line-height: 1.4; margin-top: 2px; }
 .radio { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; }

@@ -291,7 +291,7 @@ export default function Capture() {
               <div className="panel-body" style={{ borderTop: "1px solid var(--line)" }}>
                 <div className="spread" style={{ alignItems: "center" }}>
                   <span className="small muted" id="save-hint">
-                    {canSave ? "Fields marked “Ask customer” stay open. The order will need clarification before a quote." : `Review all ${FIELDS.length} fields to save.`}
+                    {canSave ? (Object.values(rev).includes("ask") ? "Fields marked “Ask customer” stay open. After saving, you’ll get a ready-to-send message asking for them." : "Everything is answered. The order will be ready to quote.") : `Review all ${FIELDS.length} fields to save.`}
                   </span>
                   <button className="btn btn-primary" disabled={!canSave} aria-describedby="save-hint" onClick={save}>Save draft order</button>
                 </div>

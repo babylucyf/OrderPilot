@@ -45,7 +45,7 @@ export default function Intro() {
       <section className="entry">
         <div className="entry-card">
           <div className="entry-brand">
-            <span className="brand-mark" aria-hidden>
+            <span className="entry-mark" aria-hidden>
               <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 6.5h14v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5z" fill="none" stroke="#fff" strokeWidth="1.8" /><path d="M9 10.5h6M9 14h4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /><path d="M9 6.5V4.5M15 6.5V4.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /></svg>
             </span>
             <b>OrderPilot</b>
@@ -67,7 +67,7 @@ export default function Intro() {
                   <label key={k} className="side-opt">
                     <input type="radio" name="side" value={k} checked={side === k} onChange={() => setSide(k)} />
                     <span>
-                      <span className={`side-tile ${k}`}><Icon name={SIDES[k].icon} size={22} /></span>
+                      <span className={`side-tile tile-${k}`}><Icon name={SIDES[k].icon} size={22} /></span>
                       <span className="side-text"><b>{SIDES[k].title}</b><small>{SIDES[k].sub}</small></span>
                       <span className="radio" aria-hidden />
                     </span>

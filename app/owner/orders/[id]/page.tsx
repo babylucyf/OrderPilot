@@ -5,14 +5,14 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useOrder, useStore } from "@/lib/store";
 import {
-  addDays, AREAS, BUSINESS, capacityFor, charCount, fmtDate, fmtDateTime, holdActive, lagosParts, missingFields, naira,
+  addDays, ALLOWED, AREAS, BUSINESS, combinationAllowed, earliestDate, FLAVOURS, SIZES, capacityFor, charCount, fmtDate, fmtDateTime, holdActive, lagosParts, missingFields, naira,
   orderUnits, payment, quoteLines, STAGE_LABEL, STAGE_TONE, weekday, WINDOWS, WRITING_LIMIT,
 } from "@/lib/rules";
 import { confirmationGate, nextStep } from "@/lib/ops";
 import { Avatar, Badge, CakeTop, Glyph, Sheet, WritingText } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { reached, Steps, STEP_LABELS } from "@/components/Steps";
-import type { Order } from "@/lib/types";
+import type { Flavour, Order, Size } from "@/lib/types";
 
 const CHECKS = [
   { id: "spec", label: "Specification read against revision" },
@@ -120,7 +120,7 @@ function Actions({ order }: { order: Order }) {
     switch (order.stage) {
       case "submitted":
       case "needs_clarification":
-        buttons = <button className="btn btn-primary" onClick={() => setSheet("clarify")}>Add missing details</button>;
+        buttons = <button className="btn btn-primary" onClick={() => setSheet("clarify")}>Ask for missing details</button>;
         break;
       case "ready_to_quote":
         buttons = (
@@ -195,75 +195,143 @@ function Actions({ order }: { order: Order }) {
 
 function ClarifySheet({ order, open, onClose }: { order: Order; open: boolean; onClose: () => void }) {
   const { state, dispatch } = useStore();
-  const missing = missingFields(order);
   const item = order.items[0];
-  const [date, setDate] = useState(order.fulfilment.date ?? "");
-  const [writingMode, setWritingMode] = useState<"text" | "none" | "">(item.writing === null ? "" : item.writing.kind);
-  const [text, setText] = useState(item.writing?.kind === "text" ? item.writing.text : "");
-  const [phone, setPhone] = useState(order.recipient?.phone ?? "");
+  const f = order.fulfilment;
+  const r = order.recipient;
+  const cakeMissing = !item.size || !item.flavour || !combinationAllowed(item.size, item.flavour);
+  const need = {
+    buyerPhone: !order.buyer.phone && !order.buyer.email,
+    cake: cakeMissing,
+    writing: item.writing === null,
+    date: !f.date,
+    window: !f.window,
+    address: f.method === "delivery" && !f.address,
+    recipient: f.method === "delivery" && !!r && (!r.phone || !r.name || r.name.startsWith("Recipient")),
+  };
+  const [v, setV] = useState({
+    buyerPhone: "", size: (item.size ?? null) as Size | null, flavour: (item.flavour ?? null) as Flavour | null,
+    writingMode: "" as "" | "text" | "none", writing: "", date: "", window: "", address: "",
+    rName: r && !r.name.startsWith("Recipient") ? r.name : "", rPhone: r?.phone ?? "",
+  });
+  const set = (p: Partial<typeof v>) => setV((x) => ({ ...x, ...p }));
   const [copied, setCopied] = useState(false);
-  const earliest = addDays(lagosParts(state.now).date, BUSINESS.leadDays);
+  const earliest = earliestDate(state.now).date;
+
+  // One plain question per missing field, built from the bakery's real rules
   const asks: string[] = [];
-  if (!order.fulfilment.date) asks.push("which date you need it (the earliest we can do is " + fmtDate(earliest, "long") + ")");
-  if (item.writing === null) asks.push("the exact words for the cake, or say no writing");
-  if (order.recipient && !order.recipient.phone) asks.push(`a phone number for ${order.recipient.name} so the rider can reach them`);
-  const draft = `Hi ${order.buyer.name.split(" ")[0]}, thank you for your order with ${BUSINESS.name}. Before we can send your quote, please share ${asks.join("; ")}.`;
-  const limit = item.size ? WRITING_LIMIT[item.size] : 32;
+  if (need.cake) {
+    const offer = FLAVOURS.map((fl) => `${fl.toLowerCase()} (${ALLOWED[fl].join(", ")} inch)`).join(", ");
+    asks.push(`Which size and flavour would you like? We offer ${offer}.`);
+  }
+  if (need.writing) asks.push("What should we write on the cake, exactly as you want it spelt? Or would you prefer no writing?");
+  if (need.date) asks.push(`Which date do you need it? The earliest we can make it is ${fmtDate(earliest, "long")}.`);
+  if (need.window) asks.push(`Which time suits you: ${WINDOWS.join(", ")}?`);
+  if (need.address) asks.push("What is the full delivery address?");
+  if (need.recipient) asks.push("What is the name and phone number of the person receiving the cake, so the rider can reach them on the day?");
+  if (need.buyerPhone) asks.push("What is the best phone number to reach you?");
+  const first = order.buyer.name.split(" ")[0] || "there";
+  const draft = asks.length
+    ? `Hi ${first}, thank you for your order with ${BUSINESS.name}. Before we send your quote, please let us know:\n${asks.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    : "";
+  const limit = v.size ? WRITING_LIMIT[v.size] : 32;
+  const opts = { "--gap": "8px" } as React.CSSProperties;
+
   return (
-    <Sheet open={open} onClose={onClose} title="Add missing details">
-      <p className="small muted">Still missing: {missing.join(", ") || "nothing"}</p>
-      <div className="stack" style={{ "--gap": "6px", background: "var(--paper)", padding: 12, borderRadius: 8 } as React.CSSProperties}>
-        <span className="small" style={{ fontWeight: 600 }}>Suggested message to the customer</span>
-        <span className="small muted">Drafted by AI from the known details. Edit it before you send. Nothing is sent automatically.</span>
-        <p style={{ fontSize: 14 }}>{draft}</p>
-        <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { navigator.clipboard?.writeText(draft).catch(() => {}); setCopied(true); }}>
-          {copied ? "Copied. Paste it into your chat" : "Copy message"}
-        </button>
-      </div>
-      <hr className="divider" />
-      <p className="small" style={{ fontWeight: 600 }}>When the customer replies, record their answers here.</p>
-      {!order.fulfilment.date && (
-        <div className="field">
-          <label htmlFor="c-date">Fulfilment date</label>
-          <input id="c-date" className="input" type="date" min={earliest} value={date} onChange={(e) => setDate(e.target.value)} />
-          <span className="hint">Earliest under the 3-day lead time: {fmtDate(earliest, "long")}</span>
+    <Sheet open={open} onClose={onClose} title="Ask for missing details">
+      <p className="small muted">The quote is blocked until these are answered: {missingFields(order).join(", ") || "nothing"}.</p>
+      {draft && (
+        <div className="stack" style={{ "--gap": "8px", background: "var(--paper)", padding: 14, borderRadius: 12 } as React.CSSProperties}>
+          <span className="small" style={{ fontWeight: 600 }}>1. Send this to {first}</span>
+          <span className="small muted">Drafted from the missing fields and your catalogue. Edit it in WhatsApp if you like. Nothing is sent automatically.</span>
+          <p style={{ fontSize: 14, whiteSpace: "pre-line" }}>{draft}</p>
+          <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { navigator.clipboard?.writeText(draft).catch(() => {}); setCopied(true); }}>
+            {copied ? "Copied. Paste it into the chat" : "Copy message"}
+          </button>
         </div>
       )}
-      {item.writing === null && (
-        <fieldset className="stack" style={{ "--gap": "8px" } as React.CSSProperties}>
+      <hr className="divider" />
+      <p className="small" style={{ fontWeight: 600 }}>2. When {first} replies, record the answers</p>
+      <p className="small muted" style={{ marginTop: -10 }}>Fill in what they’ve answered. Anything left blank stays on the list.</p>
+
+      {need.cake && (
+        <fieldset className="stack" style={opts}>
+          <legend className="legend">Size and flavour</legend>
+          <div className="choices" style={{ "--n": 3 } as React.CSSProperties}>
+            {SIZES.map((sz) => {
+              const dis = !!v.flavour && !ALLOWED[v.flavour].includes(sz);
+              return <label key={sz} className="choice"><input type="radio" name="c-size" checked={v.size === sz} disabled={dis} onChange={() => set({ size: sz })} /><span>{sz}-inch</span></label>;
+            })}
+          </div>
+          <div className="choices" style={{ "--n": 2 } as React.CSSProperties}>
+            {FLAVOURS.map((fl) => {
+              const dis = !!v.size && !ALLOWED[fl].includes(v.size);
+              return <label key={fl} className="choice"><input type="radio" name="c-fl" checked={v.flavour === fl} disabled={dis} onChange={() => set({ flavour: fl })} /><span>{fl}{dis && <small>Not in {v.size}-inch</small>}</span></label>;
+            })}
+          </div>
+        </fieldset>
+      )}
+      {need.writing && (
+        <fieldset className="stack" style={opts}>
           <legend className="legend">Cake writing</legend>
           <div className="choices" style={{ "--n": 2 } as React.CSSProperties}>
-            <label className="choice"><input type="radio" name="wm" checked={writingMode === "text"} onChange={() => setWritingMode("text")} /><span>Add writing</span></label>
-            <label className="choice"><input type="radio" name="wm" checked={writingMode === "none"} onChange={() => setWritingMode("none")} /><span>No writing</span></label>
+            <label className="choice"><input type="radio" name="wm" checked={v.writingMode === "text"} onChange={() => set({ writingMode: "text" })} /><span>Add writing</span></label>
+            <label className="choice"><input type="radio" name="wm" checked={v.writingMode === "none"} onChange={() => set({ writingMode: "none" })} /><span>No writing</span></label>
           </div>
-          {writingMode === "text" && (
+          {v.writingMode === "text" && (
             <div className="field">
               <label htmlFor="c-text">Exact words, as the customer wrote them</label>
-              <input id="c-text" className="input" value={text} onChange={(e) => setText(e.target.value)} maxLength={80} aria-describedby="c-text-h" />
-              <span id="c-text-h" className="hint">{charCount(text)} of {limit} characters. Spelling and punctuation are kept exactly.</span>
+              <input id="c-text" className="input" value={v.writing} onChange={(e) => set({ writing: e.target.value })} maxLength={80} aria-describedby="c-text-h" spellCheck={false} />
+              <span id="c-text-h" className="hint">{charCount(v.writing)} of {limit} characters. Spelling and punctuation are kept exactly.</span>
             </div>
           )}
         </fieldset>
       )}
-      {order.recipient && !order.recipient.phone && (
+      {need.date && (
         <div className="field">
-          <label htmlFor="c-phone">Recipient phone ({order.recipient.name})</label>
-          <input id="c-phone" className="input" type="tel" inputMode="tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <label htmlFor="c-date">Date</label>
+          <input id="c-date" className="input" type="date" min={earliest} value={v.date} onChange={(e) => set({ date: e.target.value })} aria-describedby="c-date-h" />
+          <span id="c-date-h" className="hint">Earliest under the {BUSINESS.leadDays}-day lead time: {fmtDate(earliest, "long")}</span>
         </div>
       )}
+      {need.window && (
+        <fieldset className="stack" style={opts}>
+          <legend className="legend">Time window</legend>
+          <div className="choices" style={{ "--n": 2 } as React.CSSProperties}>
+            {WINDOWS.map((w) => <label key={w} className="choice"><input type="radio" name="c-w" checked={v.window === w} onChange={() => set({ window: w })} /><span>{w}</span></label>)}
+          </div>
+        </fieldset>
+      )}
+      {need.address && (
+        <div className="field"><label htmlFor="c-addr">Delivery address</label><input id="c-addr" className="input" value={v.address} onChange={(e) => set({ address: e.target.value })} /></div>
+      )}
+      {need.recipient && (
+        <div className="stack" style={opts}>
+          <div className="field"><label htmlFor="c-rname">Recipient’s name</label><input id="c-rname" className="input" autoComplete="off" value={v.rName} onChange={(e) => set({ rName: e.target.value })} /></div>
+          <div className="field"><label htmlFor="c-rphone">Recipient’s phone</label><input id="c-rphone" className="input" type="tel" inputMode="tel" autoComplete="off" value={v.rPhone} onChange={(e) => set({ rPhone: e.target.value })} /></div>
+        </div>
+      )}
+      {need.buyerPhone && (
+        <div className="field"><label htmlFor="c-bphone">{first}’s phone</label><input id="c-bphone" className="input" type="tel" inputMode="tel" value={v.buyerPhone} onChange={(e) => set({ buyerPhone: e.target.value })} /></div>
+      )}
+
       <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button className="btn btn-quiet" onClick={onClose}>Cancel</button>
+        <button className="btn btn-quiet" onClick={onClose}>Close</button>
         <button
           className="btn btn-primary"
           onClick={() => {
+            const cakeOk = !!v.size && !!v.flavour && combinationAllowed(v.size, v.flavour);
             dispatch({
               type: "resolve_fields",
               id: order.id,
               patch: {
-                fulfilment: { ...order.fulfilment, date: date || order.fulfilment.date },
-                recipient: order.recipient ? { ...order.recipient, phone: phone || order.recipient.phone } : null,
+                buyer: { ...order.buyer, phone: v.buyerPhone.trim() || order.buyer.phone },
+                fulfilment: { ...f, date: v.date || f.date, window: v.window || f.window, address: v.address.trim() || f.address },
+                recipient: r ? { ...r, name: v.rName.trim() || r.name, phone: v.rPhone.trim() || r.phone } : null,
               },
-              item: item.writing === null && writingMode ? { writing: writingMode === "none" ? { kind: "none" } : text.trim() ? { kind: "text", text } : null } : undefined,
+              item: {
+                ...(need.cake && cakeOk ? { size: v.size, flavour: v.flavour } : {}),
+                ...(need.writing && v.writingMode ? { writing: v.writingMode === "none" ? { kind: "none" as const } : v.writing.trim() ? { kind: "text" as const, text: v.writing } : null } : {}),
+              },
             });
             onClose();
           }}
