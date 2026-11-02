@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Tone } from "@/lib/rules";
 import { charCount } from "@/lib/rules";
 import type { Writing } from "@/lib/types";
@@ -85,10 +85,12 @@ export function CakeTop({ text, size = 220, flavour }: { text: string; size?: nu
 
 export function Avatar({ name, size = 28 }: { name: string; size?: number }) {
   const s = STAFF.find((x) => x.name === name);
+  const [failed, setFailed] = useState(false);
   const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("");
-  if (s?.photo) return <img src={s.photo} alt="" width={size} height={size} style={{ borderRadius: "50%", objectFit: "cover" }} />;
+  if (s?.photo && !failed)
+    return <img src={s.photo} alt="" width={size} height={size} loading="lazy" onError={() => setFailed(true)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flex: "none", background: "var(--sunk)" }} />;
   return (
-    <span aria-hidden style={{ width: size, height: size, borderRadius: "50%", background: "var(--blueberry-tint)", color: "var(--blueberry)", display: "inline-grid", placeItems: "center", fontSize: size * 0.4, fontWeight: 700, flex: "none" }}>
+    <span aria-hidden style={{ width: size, height: size, borderRadius: "50%", background: "var(--blueberry-tint)", color: "var(--blueberry)", display: "inline-grid", placeItems: "center", fontSize: Math.max(10, size * 0.38), fontWeight: 600, flex: "none" }}>
       {initials}
     </span>
   );

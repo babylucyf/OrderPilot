@@ -10,6 +10,8 @@ import {
 } from "@/lib/rules";
 import { confirmationGate, nextStep } from "@/lib/ops";
 import { Avatar, Badge, CakeTop, Glyph, Sheet, WritingText } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { reached, Steps, STEP_LABELS } from "@/components/Steps";
 import type { Order } from "@/lib/types";
 
 const CHECKS = [
@@ -37,47 +39,56 @@ export default function OrderWorkspace() {
     );
   const step = nextStep(order, state.orders, state.now);
   const tone = step?.tone ?? "done";
+  const r = reached(order);
   return (
     <>
-      <Link href="/owner/orders" className="small no-print">← All orders</Link>
-      <div className="page-head" style={{ marginTop: 12 }}>
-        <div className="stack" style={{ "--gap": "6px" } as React.CSSProperties}>
-          <h1>{order.id}, {order.buyer.name}</h1>
-          <span className="row small muted" style={{ "--gap": "10px" } as React.CSSProperties}>
+      <nav className="crumbs no-print" aria-label="Breadcrumb">
+        <Link href="/owner">Today</Link><Icon name="chevron" size={14} />
+        <Link href="/owner/orders">Orders</Link><Icon name="chevron" size={14} />
+        <span aria-current="page">{order.id}</span>
+      </nav>
+      <div className="ws-head">
+        <div>
+          <div className="ws-title">
+            <h1>{order.id}</h1>
             <Badge tone={STAGE_TONE[order.stage]}>{STAGE_LABEL[order.stage]}</Badge>
-            <span>{order.source === "pasted_message" ? "Captured from a pasted message" : order.source === "manual" ? "Entered manually" : "Came through the order link"}</span>
-            <span className="row" style={{ "--gap": "6px" } as React.CSSProperties}><Avatar name={order.assignee} size={22} />{order.assignee}</span>
-          </span>
+          </div>
+          <div className="ws-meta">
+            <span>{order.buyer.name}</span>
+            <span>{order.source === "pasted_message" ? "Captured from a chat" : order.source === "manual" ? "Entered manually" : "Came through the order link"}</span>
+            <span className="agreed">
+              {order.quote?.status === "accepted"
+                ? <><Icon name="confirm" size={16} />Agreed: rev {order.revision}, quote v{order.quote.version}, {fmtDateTime(order.quote.acceptedAt!)}</>
+                : <><Icon name="quote" size={16} />Not agreed yet</>}
+            </span>
+            <span className="person"><Avatar name={order.assignee} size={24} />{order.assignee}</span>
+          </div>
         </div>
-        {order.quote?.status === "accepted" ? (
-          <span className="stamp" aria-label={`Agreed revision ${order.revision}, quote version ${order.quote.version}`}>
-            <span>Agreed</span>
-            <b>Rev {order.revision}, quote v{order.quote.version}</b>
-            <span>{fmtDateTime(order.quote.acceptedAt!)}</span>
-          </span>
-        ) : (
-          <span className="stamp" style={{ borderStyle: "dashed", color: "var(--ink-2)", borderColor: "var(--ink-2)" }}>
-            <span>Not agreed yet</span>
-            <b>Working draft</b>
-          </span>
-        )}
+        <Link className="btn btn-secondary" href={`/track/${order.id}`} target="_blank"><Icon name="external" size={18} />Customer view</Link>
       </div>
 
       {step && (
-        <section className="next" style={{ color: TONE_FG[tone], background: TONE_BG[tone] }} aria-labelledby="next-h">
-          <div className="stack" style={{ "--gap": "4px" } as React.CSSProperties}>
-            <span className="row small" style={{ "--gap": "6px", fontWeight: 600 } as React.CSSProperties}><Glyph tone={tone} /> Next step</span>
+        <section className="panel next" aria-labelledby="next-h">
+          <span className={`next-icon ${ICON_TONE[tone]}`}><Glyph tone={tone} size={18} /></span>
+          <div>
+            <span className="small muted">Next step</span>
             <h2 id="next-h">{step.title}</h2>
             <p>{step.reason}</p>
           </div>
-          <div className="row"><Actions order={order} /></div>
+          <div className="next-actions"><Actions order={order} /></div>
         </section>
       )}
 
+      <section className="panel progress-card" aria-label="Order milestones">
+        <Steps order={order} large />
+        <div className="progress-labels" aria-hidden>
+          {STEP_LABELS.map((l, i) => <span key={l} className={i < r ? "on" : ""}>{l}</span>)}
+        </div>
+      </section>
+
       <div className="ws-grid">
         <div className="stack" style={{ "--gap": "20px" } as React.CSSProperties}>
-          <Spec order={order} />
-          <People order={order} />
+          <Details order={order} />
           <Money order={order} />
         </div>
         <div className="stack" style={{ "--gap": "20px" } as React.CSSProperties}>
@@ -89,6 +100,8 @@ export default function OrderWorkspace() {
     </>
   );
 }
+
+const ICON_TONE: Record<string, string> = { risk: "ic-red", review: "ic-blue", hold: "ic-amber", ok: "ic-green", done: "ic-violet", neutral: "ic-violet" };
 
 /* ---------------- Actions: one primary per stage, every guard explained ---------------- */
 
@@ -511,55 +524,59 @@ function IssueSheet({ order, open, onClose }: { order: Order; open: boolean; onC
 
 /* ---------------- Record panels ---------------- */
 
-function Spec({ order }: { order: Order }) {
+function Details({ order }: { order: Order }) {
   const item = order.items[0];
-  return (
-    <section className="panel" aria-labelledby="spec-h">
-      <div className="panel-head"><h2 id="spec-h">Cake specification</h2><span className="small muted">{orderUnits(order)} workload units</span></div>
-      <div className="panel-body spec">
-        <CakeTop text={item.writing?.kind === "text" ? item.writing.text : ""} flavour={item.flavour} size={180} />
-        <dl className="dl">
-          <dt>Cake</dt>
-          <dd>{item.qty} × {item.size ? `${item.size}-inch` : <span style={{ color: "var(--hold)" }}>size missing</span>}, 2 layers</dd>
-          <dt>Flavour</dt>
-          <dd>{item.flavour ?? <span style={{ color: "var(--hold)" }}>Missing</span>}</dd>
-          <dt>Finish</dt>
-          <dd>{item.finish ?? "Standard"}</dd>
-          <dt>Writing</dt>
-          <dd><WritingText writing={item.writing} className="" /></dd>
-          {item.writing?.kind === "text" && (<><dt>Characters</dt><dd>{charCount(item.writing.text)}, case and punctuation kept</dd></>)}
-        </dl>
-      </div>
-    </section>
-  );
-}
-
-function People({ order }: { order: Order }) {
   const f = order.fulfilment;
   const r = order.recipient;
+  const initials = (n: string) => n.split(" ").filter((x) => !x.endsWith(".")).map((x) => x[0]).slice(0, 2).join("");
+  const missing = (t: string) => <span style={{ color: "var(--hold)" }}>{t}</span>;
   return (
-    <section className="panel" aria-labelledby="ppl-h">
-      <div className="panel-head"><h2 id="ppl-h">Handoff and people</h2></div>
-      <div className="panel-body">
-        <dl className="dl">
-          <dt>Date</dt>
-          <dd>{f.date ? fmtDate(f.date, "long") : <span style={{ color: "var(--hold)" }}>Not agreed. Customer said “Friday” with no clear week.</span>}</dd>
-          <dt>Window</dt>
-          <dd>{f.window ?? "Missing"}</dd>
-          <dt>Method</dt>
-          <dd>{f.method === "pickup" ? `Pickup from ${BUSINESS.name}, ${BUSINESS.area}` : f.method === "delivery" ? `Delivery to ${f.area}` : "Missing"}</dd>
-          {f.method === "delivery" && (<><dt>Address</dt><dd>{f.address ?? "Missing"}</dd></>)}
-          <dt>Buyer</dt>
-          <dd>{order.buyer.name}, {order.buyer.phone}{order.buyer.email ? `, ${order.buyer.email}` : ""}</dd>
-          {r && (
-            <>
-              <dt>Recipient</dt>
-              <dd>
-                {r.name}, {r.phone || <span style={{ color: "var(--hold)" }}>phone missing</span>}
-                {r.surprise && <div className="small" style={{ color: "var(--glaze)", fontWeight: 600 }}>Surprise gift. Do not message the recipient about price or order details.</div>}
-              </dd>
-            </>
+    <section className="panel" aria-labelledby="det-h">
+      <div className="panel-head"><h2 id="det-h">Order details</h2><span className="small muted">{orderUnits(order)} workload units</span></div>
+
+      <div className="info-sec">
+        <h3>Customer</h3>
+        <div className="kv" style={{ "--cols": 2 } as React.CSSProperties}>
+          <div className="person-row">
+            <span className="initials" aria-hidden>{initials(order.buyer.name)}</span>
+            <span><b style={{ fontWeight: 600 }}>{order.buyer.name}</b><span className="sub">Buyer, {order.buyer.phone}{order.buyer.email ? `, ${order.buyer.email}` : ""}</span></span>
+          </div>
+          {r ? (
+            <div className="person-row">
+              <span className="initials" aria-hidden>{initials(r.name)}</span>
+              <span>
+                <b style={{ fontWeight: 600 }}>{r.name}</b>
+                <span className="sub">Recipient, {r.phone || missing("phone missing")}</span>
+                {r.surprise && <span className="sub" style={{ color: "var(--glaze)", fontWeight: 500 }}>Surprise. No price or order messages to the recipient.</span>}
+              </span>
+            </div>
+          ) : (
+            <div className="person-row"><span className="sub">Buyer collects or receives the cake.</span></div>
           )}
+        </div>
+      </div>
+
+      <div className="info-sec">
+        <h3>Cake</h3>
+        <div className="cake-row">
+          <CakeTop text={item.writing?.kind === "text" ? item.writing.text : ""} flavour={item.flavour} size={132} />
+          <dl className="kv" style={{ "--cols": 3 } as React.CSSProperties}>
+            <div><dt>Size</dt><dd>{item.size ? `${item.qty} × ${item.size}-inch, 2 layers` : missing("Missing")}</dd></div>
+            <div><dt>Flavour</dt><dd>{item.flavour ?? missing("Missing")}</dd></div>
+            <div><dt>Finish</dt><dd>{item.finish ?? "Standard"}</dd></div>
+            <div className="wide"><dt>Writing, exactly as agreed</dt><dd><WritingText writing={item.writing} className="" /></dd></div>
+            <div><dt>Characters</dt><dd>{item.writing?.kind === "text" ? charCount(item.writing.text) : "None"}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div className="info-sec">
+        <h3>Handoff</h3>
+        <dl className="kv">
+          <div><dt>Date</dt><dd>{f.date ? fmtDate(f.date, "long") : missing("Not agreed")}</dd></div>
+          <div><dt>Window</dt><dd>{f.window ?? missing("Missing")}</dd></div>
+          <div><dt>Method</dt><dd>{f.method === "pickup" ? "Pickup" : f.method === "delivery" ? `Delivery, ${f.area}` : missing("Missing")}</dd></div>
+          <div><dt>{f.method === "delivery" ? "Address" : "Collect from"}</dt><dd>{f.method === "delivery" ? f.address ?? missing("Missing") : `${BUSINESS.name}, ${BUSINESS.area}`}</dd></div>
         </dl>
       </div>
     </section>
@@ -657,8 +674,10 @@ function History({ order }: { order: Order }) {
       <ol className="timeline panel-body" reversed>
         {[...order.events].reverse().map((e, i) => (
           <li key={i}>
-            <time dateTime={e.at}>{fmtDateTime(e.at)}</time>
-            <span>{e.text} <span className="small muted">by {e.actor}{e.customerVisible ? ", customer can see this" : ", internal"}</span></span>
+            <div>
+              <span>{e.text}</span>
+              <time dateTime={e.at}>{fmtDateTime(e.at)}, {e.actor}{e.customerVisible ? ", visible to customer" : ", internal"}</time>
+            </div>
           </li>
         ))}
       </ol>

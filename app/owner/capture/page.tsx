@@ -192,10 +192,10 @@ export default function Capture() {
             <>
               <div className="field">
                 <label htmlFor="msg" className="sr-only">Pasted message</label>
-                <textarea id="msg" className="textarea" style={{ minHeight: 260 }} value={text} onChange={(e) => setText(e.target.value)} />
+                <textarea id="msg" className="textarea msg-box" rows={Math.max(8, text.split("\n").length * 2 + 1)} value={text} onChange={(e) => setText(e.target.value)} />
                 <span className="hint">Sample WhatsApp export with invented names. Payment details and passwords should never be pasted here.</span>
               </div>
-              <label className="row small" style={{ minHeight: 44 }}>
+              <label className="row small" style={{ minHeight: 44, color: "var(--ink-2)" }}>
                 <input type="checkbox" checked={outage} onChange={(e) => setOutage(e.target.checked)} style={{ width: 20, height: 20, accentColor: "var(--blueberry)" }} />
                 Demo: simulate the AI service being down
               </label>

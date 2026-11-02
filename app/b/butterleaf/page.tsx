@@ -9,6 +9,8 @@ import {
 } from "@/lib/rules";
 import type { Flavour, Method, Order, Size } from "@/lib/types";
 import { CakeTop, Glyph } from "@/components/ui";
+import { CustHead, SwitchSide } from "@/components/Cust";
+import { Spot } from "@/components/Spot";
 import "../../customer.css";
 
 interface Form {
@@ -131,41 +133,63 @@ export default function RequestBuilder() {
   if (submitted)
     return (
       <main id="main" className="cust">
-        <Header />
+        <CustHead sub="Request sent" />
+        <div className="hero" role="status">
+          <Spot kind="request" tone="review" />
+          <h1 ref={headRef} tabIndex={-1}>Request received</h1>
+          <p>{BUSINESS.name} will check the details and send your quote. You pay nothing until you accept it.</p>
+        </div>
         <div className="step">
-          <div className="state-banner t-review">
-            <span className="row small" style={{ "--gap": "6px", fontWeight: 600 } as React.CSSProperties}><Glyph tone="review" /> Request received</span>
-            <h1 ref={headRef} tabIndex={-1} style={{ marginTop: 6 }}>We’ve received your request</h1>
-            <p style={{ marginTop: 8 }}>Your order is <b>not confirmed yet</b>. Next, {BUSINESS.name} will check the details and send your quote. You pay nothing until you accept it.</p>
+          <div className="card item">
+            <span className="thumb"><CakeTop text={f.writingMode === "text" ? f.writing : ""} flavour={f.flavour} size={68} /></span>
+            <span>
+              <span className="small muted">Celebration cake</span>
+              <span style={{ display: "block", fontSize: 16, fontWeight: 500 }}>{f.size}-inch {f.flavour?.toLowerCase()}</span>
+              <span className="small" style={{ color: "var(--ink-2)" }}>{f.finish}</span>
+            </span>
+            <span style={{ fontWeight: 600, textAlign: "right" }}>{naira(estimate ?? 0)}<span className="small muted" style={{ display: "block", fontWeight: 400 }}>estimate</span></span>
           </div>
-          <div className="card stack">
-            <dl className="sumlist">
-              <dt>Reference</dt><dd><b>{submitted}</b></dd>
-              <dt>Received</dt><dd>{fmtDate(state.now.slice(0, 10), "long")}</dd>
-              <dt>Updates</dt><dd>{f.email ? `By email to ${f.email}` : `The bakery will contact you on ${f.phone}`}</dd>
+          <div className="card">
+            <div className="card-head"><h2>Request summary</h2></div>
+            <dl className="rows">
+              <div><dt>Reference</dt><dd>{submitted}</dd></div>
+              <div><dt>Date</dt><dd>{fmtDate(f.date, "long")}</dd></div>
+              <div><dt>Time</dt><dd>{f.window}</dd></div>
+              <div><dt>{f.method === "pickup" ? "Pickup" : "Deliver to"}</dt><dd>{f.method === "pickup" ? BUSINESS.area : f.address}</dd></div>
+              <div><dt>Updates</dt><dd>{f.email ? `Email, ${f.email}` : `Phone, ${f.phone}`}</dd></div>
             </dl>
           </div>
-          <Link className="btn btn-primary" href={`/track/${submitted}`}>Track this request</Link>
-          <p className="small muted">Demo tip: open the <Link href="/owner">owner workspace</Link> in another tab. Your request is at the top of Today.</p>
+          <div>
+            <Link className="btn-pill" href={`/track/${submitted}`}>Track this request</Link>
+            <p className="cta-note review">Not confirmed yet. The bakery reviews it first</p>
+          </div>
+          <p className="small muted" style={{ textAlign: "center" }}>Demo tip: open the <Link href="/owner">owner workspace</Link> in another tab. Your request is at the top of Today.</p>
+          <SwitchSide />
         </div>
       </main>
     );
 
   return (
     <main id="main" className="cust">
-      <Header />
+      <CustHead sub="Custom cakes, Surulere" />
       <nav aria-label="Order progress">
         <div className="progress" aria-hidden>{STEPS.map((s, i) => <span key={s} className={i <= step ? "on" : ""} />)}</div>
-        <p className="small muted">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
+        <p className="step-of">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
       </nav>
 
       <div className="step">
-        <h1 ref={headRef} tabIndex={-1}>{["Choose your cake", "What should it say?", "When do you need it?", "Your details", "Check your request"][step]}</h1>
+        <div className="step-title">
+          <h1 ref={headRef} tabIndex={-1}>{["Choose your cake", "What should it say?", "When do you need it?", "Your details", "Check your request"][step]}</h1>
+          <p>{["Two layers, baked to order. Prices update as you choose.", "We pipe it exactly as you type it.", `Cakes need ${BUSINESS.leadDays} days’ notice.`, "So the bakery can send your quote.", "Nothing is booked until you accept a quote."][step]}</p>
+        </div>
 
         {errors.length > 0 && (
           <div className="err-summary" ref={errRef} tabIndex={-1} role="alert" aria-labelledby="err-h">
-            <b id="err-h">{errors.length === 1 ? "One thing to fix" : `${errors.length} things to fix`}</b>
-            <ul>{errors.map((e) => <li key={e.id + e.msg}><a href={`#${e.id}`}>{e.msg}</a></li>)}</ul>
+            <Glyph tone="risk" size={18} />
+            <div>
+              <b id="err-h">{errors.length === 1 ? "One thing to fix" : `${errors.length} things to fix`}</b>
+              <ul>{errors.map((e) => <li key={e.id + e.msg}><a href={`#${e.id}`}>{e.msg}</a></li>)}</ul>
+            </div>
           </div>
         )}
 
@@ -173,13 +197,17 @@ export default function RequestBuilder() {
           <>
             <fieldset className="stack" style={{ "--gap": "10px" } as React.CSSProperties}>
               <legend className="legend" style={{ marginBottom: 10 }}>Size</legend>
-              <div className="choices" style={{ "--n": 3 } as React.CSSProperties}>
+              <div className="opts">
                 {SIZES.map((s) => {
                   const dis = !!f.flavour && !ALLOWED[f.flavour].includes(s);
                   return (
-                    <label key={s} className="choice">
+                    <label key={s} className="opt">
                       <input id={`size-${s}`} type="radio" name="size" checked={f.size === s} disabled={dis} onChange={() => set({ size: s })} aria-describedby={dis ? "size-note" : undefined} />
-                      <span>{s}-inch<small>{s === 8 ? "Serves 12 to 15" : s === 10 ? "Serves 20 to 25" : "Serves 30 to 40"}</small></span>
+                      <span>
+                        <span className="tile">{s}”</span>
+                        <span><b>{s}-inch cake</b><small>{s === 8 ? "Serves 12 to 15" : s === 10 ? "Serves 20 to 25" : "Serves 30 to 40"}</small></span>
+                        <em>from {naira(itemUnitPrice({ size: s, flavour: "Vanilla", qty: 1, finish: "Smooth buttercream", writing: null }))}</em>
+                      </span>
                     </label>
                   );
                 })}
@@ -204,11 +232,15 @@ export default function RequestBuilder() {
             </fieldset>
             <fieldset className="stack" style={{ "--gap": "10px" } as React.CSSProperties}>
               <legend className="legend" style={{ marginBottom: 10 }}>Finish</legend>
-              <div className="choices" style={{ "--n": 1 } as React.CSSProperties}>
-                {FINISHES.map((fi) => (
-                  <label key={fi.id} className="choice">
+              <div className="opts">
+                {FINISHES.map((fi, i) => (
+                  <label key={fi.id} className="opt">
                     <input type="radio" name="finish" checked={f.finish === fi.id} onChange={() => set({ finish: fi.id })} />
-                    <span style={{ flexDirection: "row", justifyContent: "space-between", padding: "8px 16px" }}>{fi.id}<small>{fi.extra ? `+${naira(fi.extra)}` : "Included"}</small></span>
+                    <span>
+                      <span className="tile" aria-hidden><FinishArt kind={i} /></span>
+                      <span><b>{fi.id}</b><small>{["Clean, classic, any colour", "Glossy drip over the top edge", "Seasonal fresh flowers"][i]}</small></span>
+                      <em>{fi.extra ? `+${naira(fi.extra)}` : "Included"}</em>
+                    </span>
                   </label>
                 ))}
               </div>
@@ -347,9 +379,11 @@ export default function RequestBuilder() {
               <p>{f.name}, {f.phone}{f.email && `, ${f.email}`}{f.forWhom === "other" && <><br />For {f.rName}{f.surprise ? " (surprise)" : ""}</>}</p>
             </div>
             <div className="card stack" style={{ "--gap": "10px" } as React.CSSProperties}>
-              <h2>Estimated price</h2>
-              {quoteLines(draftOrder()).lines.map((l) => <div key={l.label} className="spread small"><span>{l.label}</span><span>{naira(l.amount)}</span></div>)}
-              <div className="spread"><b>Estimate</b><b>{naira(estimate ?? 0)}</b></div>
+              <div className="card-head" style={{ marginBottom: 4 }}><h2>Estimated price</h2></div>
+              <dl className="rows money">
+                {quoteLines(draftOrder()).lines.map((l) => <div key={l.label}><dt>{l.label}</dt><dd>{naira(l.amount)}</dd></div>)}
+                <div className="total"><dt>Estimate</dt><dd>{naira(estimate ?? 0)}</dd></div>
+              </dl>
               <p className="small muted">This is an estimate. Your quote confirms the final price. To book, you pay a {BUSINESS.depositPercent}% deposit after accepting the quote, and the date is held for {BUSINESS.holdHours} hours.</p>
             </div>
             <p className="small muted">By sending, you agree that {BUSINESS.name} can use these details to prepare your order. This is a concept prototype: nothing is sent to a real bakery.</p>
@@ -363,29 +397,35 @@ export default function RequestBuilder() {
             <span className="small muted">{estimate ? "Estimate" : "Price"}</span>
             <b>{estimate ? naira(estimate) : f.size && !f.flavour ? `From ${naira(itemUnitPrice({ size: f.size, flavour: "Vanilla", qty: 1, finish: f.finish, writing: null }))}` : "Choose a cake"}</b>
           </span>
-          <span className="row" style={{ "--gap": "8px", flexWrap: "nowrap" } as React.CSSProperties}>
-            {step > 0 && <button className="btn btn-secondary" onClick={() => go(step - 1)}>Back</button>}
+          <span className="acts">
+            {step > 0 && <button className="btn-pill ghost" onClick={() => go(step - 1)}>Back</button>}
             {step < 4 ? (
-              <button className="btn btn-primary" onClick={() => go(step + 1)}>Continue</button>
+              <button className="btn-pill" onClick={() => go(step + 1)}>Continue</button>
             ) : (
-              <button className="btn btn-primary" onClick={submit} disabled={sending} aria-busy={sending}>{sending ? "Sending…" : "Send request"}</button>
+              <button className="btn-pill" onClick={submit} disabled={sending} aria-busy={sending}>{sending ? "Sending…" : "Send request"}</button>
             )}
           </span>
         </div>
       </div>
-      <p id="contact" className="small muted" style={{ marginTop: 32 }}>Butterleaf Cakes is a fictional bakery for this concept, so there is no number to call.</p>
+      <p id="contact" className="small muted" style={{ marginTop: 32, textAlign: "center" }}>Butterleaf Cakes is a fictional bakery for this concept, so there is no number to call.</p>
+      <SwitchSide />
     </main>
   );
 }
 
-function Header() {
+function FinishArt({ kind }: { kind: number }) {
   return (
-    <header className="cust-head">
-      <span className="cust-logo" aria-hidden>B</span>
-      <span>
-        <b>{BUSINESS.name}</b>
-        <span className="small muted">Custom cakes, {BUSINESS.area}</span>
-      </span>
-    </header>
+    <svg viewBox="0 0 32 32" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <ellipse cx="16" cy="11" rx="11" ry="4" />
+      <path d="M5 11v10c0 2.2 4.9 4 11 4s11-1.8 11-4V11" />
+      {kind === 1 && <path d="M7 13.5v3M11 14.5v5M16 15v3M21 14.5v4.5M25 13.5v2.5" />}
+      {kind === 2 && (
+        <>
+          <circle cx="11" cy="9" r="2" fill="currentColor" stroke="none" />
+          <circle cx="16" cy="7.5" r="2.2" fill="currentColor" stroke="none" />
+          <circle cx="21" cy="9" r="2" fill="currentColor" stroke="none" />
+        </>
+      )}
+    </svg>
   );
 }

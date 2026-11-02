@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useOrder, useStore } from "@/lib/store";
-import { BUSINESS, CUSTOMER_STAGE, fmtDate, fmtDateTime, naira, payment, type Tone } from "@/lib/rules";
+import { BUSINESS, fmtDate, fmtDateTime, naira, payment, quoteLines, type Tone } from "@/lib/rules";
 import type { Order, Stage } from "@/lib/types";
-import { CakeTop, Glyph, WritingText } from "@/components/ui";
+import { CakeTop, WritingText } from "@/components/ui";
+import { Spot, type SpotKind } from "@/components/Spot";
+import { CustHead, SwitchSide } from "@/components/Cust";
 import "../../customer.css";
 
 const MILESTONES: { label: string; reached: Stage[] }[] = [
@@ -27,165 +29,147 @@ export default function Track() {
   if (!order)
     return (
       <main id="main" className="cust">
-        <Header />
-        <div className="step">
+        <CustHead sub="Your order" />
+        <div className="hero">
+          <Spot kind="question" tone="done" />
           <h1>{ready ? "We can’t find that order" : "Loading your order"}</h1>
-          {ready && <p className="muted">Check the link from your message. If the demo was reset, start a new request on the <Link href="/b/butterleaf">order page</Link>.</p>}
+          {ready && <p>Check the link from your message. If the demo was reset, start a new request.</p>}
         </div>
+        {ready && <Link className="btn-pill" href="/b/butterleaf" style={{ marginTop: 24 }}>Order a cake</Link>}
+        <SwitchSide />
       </main>
     );
 
+  const s = status(order);
   return (
     <main id="main" className="cust">
-      <Header />
+      <CustHead sub={`Order ${order.id}`} />
+      <div className="hero" role="status">
+        <Spot kind={s.spot} tone={s.tone} />
+        <h1>{s.title}</h1>
+        <p>{s.body}</p>
+      </div>
       <div className="step">
-        <Banner order={order} />
-        <Action order={order} />
+        <Item order={order} />
+        <Action order={order} note={s.note} tone={s.tone} />
         <Summary order={order} />
         <Progress order={order} />
         <Updates order={order} />
-        <section className="card stack" aria-labelledby="help-h" style={{ "--gap": "8px" } as React.CSSProperties}>
-          <h2 id="help-h">Need to change something?</h2>
-          <p className="small">Call or message {BUSINESS.name} with your reference <b>{order.id}</b>. Your current order stays as it is until the bakery agrees a change with you. Butterleaf is a fictional bakery, so there is no number to call in this demo.</p>
-        </section>
-        <p className="small muted">In the real product, this page opens only after you verify the phone or email you ordered with. A reference number alone doesn’t give access.</p>
+        <div className="card">
+          <h2>Need to change something?</h2>
+          <p className="small" style={{ color: "var(--ink-2)", marginTop: 6 }}>
+            Contact {BUSINESS.name} with your reference <b>{order.id}</b>. Your order stays as it is until the bakery agrees a change with you. Butterleaf is a fictional bakery, so there is no number to call in this demo.
+          </p>
+        </div>
+        <p className="small muted" style={{ textAlign: "center" }}>In the real product, this page opens only after you verify the phone or email you ordered with.</p>
+        <SwitchSide />
       </div>
     </main>
   );
 }
 
-function Header() {
-  return (
-    <header className="cust-head">
-      <span className="cust-logo" aria-hidden>B</span>
-      <span>
-        <b>{BUSINESS.name}</b>
-        <span className="small muted">Your order</span>
-      </span>
-    </header>
-  );
-}
-
-function Banner({ order }: { order: Order }) {
-  const { state } = useStore();
+function status(order: Order): { spot: SpotKind; tone: Tone; title: string; body: string; note: string } {
   const p = payment(order);
   const late = order.issues.find((i) => i.kind === "late_payment" && i.status === "open");
   const delivery = order.issues.find((i) => i.kind === "recipient_unavailable" && i.status === "open");
-  let tone: Tone = "review";
-  let title = CUSTOMER_STAGE[order.stage];
-  let body = "";
   const rejected = order.claims.filter((c) => c.status === "rejected").at(-1);
+  const when = `${fmtDate(order.fulfilment.date, "long")}, ${order.fulfilment.window}`;
+  if (delivery) return { spot: "alert", tone: "risk", title: "Delivery delayed", body: `Our rider couldn’t reach ${order.recipient?.name ?? "the recipient"}. The bakery will contact you shortly with a plan.`, note: "Your cake is safe with the rider" };
+  if (late) return { spot: "alert", tone: "risk", title: "Payment arrived late", body: "We received a payment after your quote expired. The bakery is checking availability and will contact you.", note: "Your payment is on record and has not been lost" };
+  switch (order.stage) {
+    case "submitted":
+    case "ready_to_quote":
+      return { spot: "request", tone: "review", title: "Request received", body: "The bakery is checking the details and will send your quote.", note: "Not confirmed yet. You pay nothing until you accept a quote" };
+    case "needs_clarification":
+      return { spot: "question", tone: "hold", title: "One quick question", body: "The bakery needs a little more information before quoting. They’ll message you.", note: "Not confirmed yet" };
+    case "awaiting_customer":
+      return { spot: "quote", tone: "hold", title: "Your quote is ready", body: "Check the price and details, then accept to keep your date.", note: `Date held until ${fmtDateTime(order.quote!.expiresAt)}` };
+    case "awaiting_payment":
+      if (p.pending.length) return { spot: "checking", tone: "review", title: "Checking your payment", body: "The bakery is matching your transfer. Please don’t pay again.", note: "Payment being checked. Not confirmed yet" };
+      return { spot: "wallet", tone: "hold", title: "Pay your deposit", body: rejected ? `Message from the bakery: ${rejected.note}` : `Pay ${naira(p.required)} to keep your date.`, note: `Pay by ${fmtDateTime(order.quote!.expiresAt)}` };
+    case "ready_to_confirm":
+      return { spot: "checking", tone: "review", title: "Payment verified", body: "The bakery will confirm your order shortly. It isn’t confirmed until they do.", note: "Deposit verified, awaiting confirmation" };
+    case "confirmed":
+      return { spot: "cake", tone: "ok", title: "Order confirmed", body: `Your cake is booked for ${when}.`, note: "Confirmed by the bakery" };
+    case "in_production":
+      return { spot: "cake", tone: "ok", title: "Being made", body: `Your cake is being made for ${when}.`, note: "Confirmed and in production" };
+    case "ready_for_handoff":
+      return order.fulfilment.method === "pickup"
+        ? { spot: "bag", tone: "ok", title: "Ready for pickup", body: `Collect from ${BUSINESS.area}, ${order.fulfilment.window}.`, note: p.balance ? `${naira(p.balance)} balance due at pickup` : "Fully paid" }
+        : { spot: "bag", tone: "ok", title: "Ready", body: "Your cake is boxed and waiting for the rider.", note: "Confirmed and ready" };
+    case "out_for_delivery":
+      return { spot: "scooter", tone: "ok", title: "On its way", body: `Expected within ${order.fulfilment.window}.`, note: "Your order is confirmed and in transit" };
+    case "delivered":
+    case "completed":
+      return { spot: "done", tone: "done", title: "Handed over", body: "Enjoy the celebration. If something isn’t right, contact the bakery.", note: "Delivered" };
+    case "expired":
+      return { spot: "alert", tone: "risk", title: "Quote expired", body: "The date was released when the quote expired. Contact the bakery for a new quote.", note: "No booking is active" };
+    default:
+      return { spot: "done", tone: "done", title: "Order closed", body: "", note: "" };
+  }
+}
 
-  if (delivery) {
-    tone = "risk";
-    title = "Your delivery is delayed";
-    body = `Our rider couldn’t reach ${order.recipient?.name ?? "the recipient"} at the address. The rider is waiting nearby and the bakery will contact you shortly with a plan.`;
-  } else if (late) {
-    tone = "risk";
-    title = "We received a payment after your quote expired";
-    body = "The bakery is checking availability and will contact you about the next step. Your payment is on record and has not been lost.";
-  } else
-    switch (order.stage) {
-      case "submitted":
-      case "ready_to_quote":
-        body = "Your order is not confirmed yet. The bakery is checking the details and will send your quote. You pay nothing until you accept it.";
-        break;
-      case "needs_clarification":
-        tone = "hold";
-        body = "The bakery needs a little more information before quoting. They will message you. Your order is not confirmed yet.";
-        break;
-      case "awaiting_customer":
-        tone = "hold";
-        body = order.quote && order.quote.expiresAt > state.now ? `Review and accept it by ${fmtDateTime(order.quote.expiresAt)} to keep your date.` : "This quote has expired. Contact the bakery for a new one.";
-        break;
-      case "awaiting_payment":
-        if (p.pending.length) {
-          tone = "review";
-          title = "Your payment is being checked";
-          body = "You’ll get a separate update when your order is confirmed. Please don’t pay again.";
-        } else {
-          tone = "hold";
-          body = `Pay the ${naira(p.required)} deposit by ${fmtDateTime(order.quote!.expiresAt)} to keep your date.`;
-        }
-        break;
-      case "ready_to_confirm":
-        tone = "review";
-        body = "Your deposit is verified. The bakery will confirm your order shortly. It is not confirmed until they do.";
-        break;
-      case "confirmed":
-      case "in_production":
-        tone = "ok";
-        body = `Your cake is booked for ${fmtDate(order.fulfilment.date, "long")}, ${order.fulfilment.window}.`;
-        break;
-      case "ready_for_handoff":
-        tone = "ok";
-        body = order.fulfilment.method === "pickup" ? `Ready for pickup, ${order.fulfilment.window}.` : "Ready and waiting for the rider.";
-        break;
-      case "out_for_delivery":
-        tone = "ok";
-        body = `On its way, expected within ${order.fulfilment.window}.`;
-        break;
-      case "delivered":
-      case "completed":
-        tone = "done";
-        body = "Handed over. If something isn’t right, contact the bakery with your reference.";
-        break;
-      case "expired":
-        tone = "risk";
-        body = "The date was released when the quote expired. Contact the bakery for a new quote.";
-        break;
-    }
-
+function Item({ order }: { order: Order }) {
+  const item = order.items[0];
+  const total = order.quote?.total ?? (item.size && item.flavour ? quoteLines(order).total : 0);
   return (
-    <div className={`state-banner t-${tone}`} role="status">
-      <span className="row small" style={{ "--gap": "6px", fontWeight: 600 } as React.CSSProperties}><Glyph tone={tone} /> {order.id}</span>
-      <h1 style={{ marginTop: 6 }}>{title}</h1>
-      {body && <p style={{ marginTop: 8 }}>{body}</p>}
-      {rejected && order.stage === "awaiting_payment" && !p.pending.length && (
-        <p style={{ marginTop: 8 }}><b>Message from the bakery:</b> {rejected.note}</p>
-      )}
+    <div className="card item">
+      <span className="thumb"><CakeTop text={item.writing?.kind === "text" ? item.writing.text : ""} flavour={item.flavour} size={68} /></span>
+      <span>
+        <span className="kind">Celebration cake</span>
+        <span className="name" style={{ display: "block" }}>{item.qty > 1 ? `${item.qty} × ` : ""}{item.size ? `${item.size}-inch` : "Size to confirm"} {item.flavour?.toLowerCase() ?? ""}</span>
+        <span className="meta">{item.finish}</span>
+      </span>
+      <span className="price">{total ? naira(total) : "Quote due"}{!order.quote && total ? <span className="meta" style={{ display: "block", fontWeight: 400 }}>estimate</span> : null}</span>
     </div>
   );
 }
 
-function Action({ order }: { order: Order }) {
+function Action({ order, note, tone }: { order: Order; note: string; tone: Tone }) {
   const { state, dispatch } = useStore();
   const [ref, setRef] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const p = payment(order);
   const q = order.quote;
-  if (!q) return null;
-  const live = q.expiresAt > state.now;
+  const live = !!q && q.expiresAt > state.now;
+  const Note = () => (note ? <p className={`cta-note ${tone}`}>{note}</p> : null);
 
-  if (order.stage === "awaiting_customer" && live)
+  if (q && order.stage === "awaiting_customer" && live)
     return (
-      <section className="card stack" aria-labelledby="quote-h" style={{ "--gap": "14px" } as React.CSSProperties}>
-        <div className="spread"><h2 id="quote-h">Quote v{q.version}</h2><span className="small muted">Sent {fmtDateTime(q.publishedAt)}</span></div>
-        {q.lines.map((l) => <div key={l.label} className="spread small"><span>{l.label}</span><span>{naira(l.amount)}</span></div>)}
-        <div className="spread" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}><b>Total</b><b>{naira(q.total)}</b></div>
-        <div className="spread"><span>Deposit to book ({BUSINESS.depositPercent}%)</span><b>{naira(q.deposit)}</b></div>
-        <div className="spread small"><span>Balance, due before {order.fulfilment.method === "pickup" ? "pickup" : "delivery"}</span><span>{naira(q.total - q.deposit)}</span></div>
-        <p className="small muted">Your date is held until {fmtDateTime(q.expiresAt)}. After that, it may be offered to someone else. Changes after confirmation need the bakery’s agreement.</p>
-        <button className="btn btn-primary" onClick={() => dispatch({ type: "accept_quote", id: order.id })}>Accept quote v{q.version}</button>
-        <p className="small muted" style={{ textAlign: "center" }}>Something not right? Contact the bakery before accepting.</p>
+      <section aria-labelledby="quote-h">
+        <div className="card">
+          <div className="card-head"><h2 id="quote-h">Quote v{q.version}</h2><span className="small muted">Sent {fmtDateTime(q.publishedAt)}</span></div>
+          <dl className="rows money">
+            {q.lines.map((l) => <div key={l.label}><dt>{l.label}</dt><dd>{naira(l.amount)}</dd></div>)}
+            <div className="total"><dt>Total</dt><dd>{naira(q.total)}</dd></div>
+            <div><dt>Deposit to book ({BUSINESS.depositPercent}%)</dt><dd>{naira(q.deposit)}</dd></div>
+            <div><dt>Balance before {order.fulfilment.method === "pickup" ? "pickup" : "delivery"}</dt><dd>{naira(q.total - q.deposit)}</dd></div>
+          </dl>
+        </div>
+        <div style={{ marginTop: 18 }}>
+          <button className="btn-pill" onClick={() => dispatch({ type: "accept_quote", id: order.id })}>Accept quote v{q.version}</button>
+          <Note />
+        </div>
       </section>
     );
 
-  if (order.stage === "awaiting_payment" && !p.pending.length && live)
+  if (q && order.stage === "awaiting_payment" && !p.pending.length && live)
     return (
-      <section className="card stack" aria-labelledby="pay-h" style={{ "--gap": "14px" } as React.CSSProperties}>
-        <h2 id="pay-h">Pay your deposit</h2>
-        <dl className="sumlist">
-          <dt>Amount</dt><dd><b>{naira(p.required)}</b></dd>
-          <dt>Bank</dt><dd>{BUSINESS.bank.name}</dd>
-          <dt>Account</dt><dd>{BUSINESS.bank.account}, {BUSINESS.bank.accountName}</dd>
-          <dt>Narration</dt><dd><b>{order.id}</b></dd>
-          <dt>Pay by</dt><dd>{fmtDateTime(q.expiresAt)}</dd>
-        </dl>
-        <p className="small muted">Synthetic bank details for this prototype. The bakery will never ask for your PIN, password or OTP.</p>
+      <section aria-labelledby="pay-h">
+        <div className="card">
+          <div className="card-head"><h2 id="pay-h">Bank transfer</h2><span className="small muted">Synthetic details</span></div>
+          <dl className="rows">
+            <div><dt>Amount</dt><dd>{naira(p.required)}</dd></div>
+            <div><dt>Bank</dt><dd>{BUSINESS.bank.name}</dd></div>
+            <div><dt>Account</dt><dd>{BUSINESS.bank.account}</dd></div>
+            <div><dt>Account name</dt><dd>{BUSINESS.bank.accountName}</dd></div>
+            <div><dt>Narration</dt><dd>{order.id}</dd></div>
+          </dl>
+        </div>
         <form
           className="stack"
+          style={{ marginTop: 18 }}
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
@@ -198,31 +182,30 @@ function Action({ order }: { order: Order }) {
           <div className="field">
             <label htmlFor="pay-ref">Transfer reference or sender name</label>
             <input id="pay-ref" className="input" value={ref} onChange={(e) => { setRef(e.target.value); setErr(""); }} aria-invalid={!!err} aria-describedby={err ? "pay-err" : "pay-hint"} />
-            {err ? <span id="pay-err" className="error-text">{err}</span> : <span id="pay-hint" className="hint">This tells the bakery the money is on its way. It doesn’t confirm your order.</span>}
+            {err ? <span id="pay-err" className="error-text">{err}</span> : <span id="pay-hint" className="hint">This tells the bakery the money is on its way. It doesn’t confirm your order. The bakery never asks for your PIN or OTP.</span>}
           </div>
-          <button className="btn btn-primary" type="submit" disabled={busy}>I’ve paid the deposit</button>
+          <button className="btn-pill" type="submit" disabled={busy}>I’ve paid the deposit</button>
+          <Note />
         </form>
       </section>
     );
 
-  if (order.stage === "awaiting_payment" && p.pending.length)
+  if (q && ["awaiting_payment", "ready_to_confirm", "confirmed", "in_production", "ready_for_handoff", "out_for_delivery", "delivered", "completed"].includes(order.stage))
     return (
-      <section className="card stack" style={{ "--gap": "6px" } as React.CSSProperties} aria-label="Payment status">
-        <div className="spread"><span>Deposit claimed</span><b>{naira(p.pendingAmount)}</b></div>
-        <div className="spread small"><span>Verified so far</span><span>{naira(p.verified)}</span></div>
-        <p className="small muted">Checking usually happens during opening hours. Your date stays held while the bakery checks.</p>
+      <section>
+        <div className="card">
+          <div className="card-head"><h2>Payment</h2></div>
+          <dl className="rows">
+            <div><dt>Total</dt><dd>{naira(p.total)}</dd></div>
+            {p.pending.length > 0 && <div><dt>Being checked</dt><dd>{naira(p.pendingAmount)}</dd></div>}
+            <div><dt>Paid and verified</dt><dd>{naira(p.verified)}</dd></div>
+            <div className="total"><dt>Balance</dt><dd>{p.balance ? naira(p.balance) : "Nothing left"}</dd></div>
+          </dl>
+        </div>
+        <Note />
       </section>
     );
-
-  if (["ready_to_confirm", "confirmed", "in_production", "ready_for_handoff", "out_for_delivery"].includes(order.stage))
-    return (
-      <section className="card stack" style={{ "--gap": "6px" } as React.CSSProperties} aria-label="Payment summary">
-        <div className="spread"><span>Total</span><b>{naira(p.total)}</b></div>
-        <div className="spread small"><span>Paid and verified</span><span>{naira(p.verified)}</span></div>
-        <div className="spread small"><span>Balance</span><span>{p.balance ? `${naira(p.balance)}, due before ${order.fulfilment.method === "pickup" ? "pickup" : "delivery"}` : "Nothing left to pay"}</span></div>
-      </section>
-    );
-  return null;
+  return <Note />;
 }
 
 function Summary({ order }: { order: Order }) {
@@ -230,16 +213,14 @@ function Summary({ order }: { order: Order }) {
   const f = order.fulfilment;
   return (
     <section className="card" aria-labelledby="sum-h">
-      <h2 id="sum-h" style={{ marginBottom: 12 }}>{order.quote?.status === "accepted" ? "What you agreed" : "What you asked for"}</h2>
-      <div style={{ display: "grid", placeItems: "center", marginBottom: 12 }}>
-        <CakeTop text={item.writing?.kind === "text" ? item.writing.text : ""} flavour={item.flavour} size={180} />
-      </div>
-      <dl className="sumlist">
-        <dt>Cake</dt><dd>{item.size ? `${item.size}-inch` : "Size to confirm"} {item.flavour?.toLowerCase() ?? ""}, {item.finish?.toLowerCase()}</dd>
-        <dt>Writing</dt><dd><WritingText writing={item.writing} /></dd>
-        <dt>When</dt><dd>{f.date ? fmtDate(f.date, "long") : "Date to confirm"}{f.window ? `, ${f.window}` : ""}</dd>
-        <dt>{f.method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{f.method === "pickup" ? BUSINESS.area : `${f.address ?? "Address to confirm"}`}</dd>
-        {order.recipient && (<><dt>For</dt><dd>{order.recipient.name}{order.recipient.surprise ? ", surprise" : ""}</dd></>)}
+      <div className="card-head"><h2 id="sum-h">{order.quote?.status === "accepted" ? "What you agreed" : "Order summary"}</h2></div>
+      <dl className="rows">
+        <div><dt>Order ID</dt><dd>{order.id}</dd></div>
+        <div><dt>Writing</dt><dd><WritingText writing={item.writing} /></dd></div>
+        <div><dt>Date</dt><dd>{f.date ? fmtDate(f.date, "long") : "To confirm"}</dd></div>
+        <div><dt>Time</dt><dd>{f.window ?? "To confirm"}</dd></div>
+        <div><dt>{f.method === "pickup" ? "Pickup" : "Deliver to"}</dt><dd>{f.method === "pickup" ? BUSINESS.area : f.address ?? "To confirm"}</dd></div>
+        {order.recipient && <div><dt>For</dt><dd>{order.recipient.name}{order.recipient.surprise ? ", surprise" : ""}</dd></div>}
       </dl>
     </section>
   );
@@ -250,7 +231,7 @@ function Progress({ order }: { order: Order }) {
   const nowIndex = MILESTONES.findIndex((m) => !m.reached.includes(order.stage));
   return (
     <section className="card" aria-labelledby="prog-h">
-      <h2 id="prog-h" style={{ marginBottom: 14 }}>Progress</h2>
+      <div className="card-head"><h2 id="prog-h">Progress</h2></div>
       <ol className="track-steps">
         {MILESTONES.map((m, i) => {
           const done = m.reached.includes(order.stage);
@@ -259,14 +240,14 @@ function Progress({ order }: { order: Order }) {
             <li key={m.label} className={done ? "done" : isNow ? "now" : ""} aria-current={isNow ? "step" : undefined}>
               <span className="dotmark" aria-hidden>{done && <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.5 5 9l5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>}</span>
               <span>
-                <span style={{ fontWeight: done || isNow ? 600 : 400, color: done || isNow ? "var(--ink)" : "var(--ink-2)" }}>{m.label}</span>
+                <span style={{ fontWeight: done || isNow ? 500 : 400, color: done || isNow ? "var(--ink)" : "var(--ink-3)" }}>{m.label}</span>
                 <span className="sr-only">{done ? ", done" : isNow ? ", next" : ", not yet"}</span>
               </span>
             </li>
           );
         })}
       </ol>
-      <p className="small muted">Steps are only ticked when the bakery records them, never by the clock.</p>
+      <p className="small muted">Ticked only when the bakery records it, never by the clock.</p>
     </section>
   );
 }
@@ -276,12 +257,12 @@ function Updates({ order }: { order: Order }) {
   if (!events.length) return null;
   return (
     <section className="card" aria-labelledby="up-h">
-      <h2 id="up-h" style={{ marginBottom: 10 }}>Updates</h2>
-      <ol className="stack" style={{ listStyle: "none", padding: 0, margin: 0, "--gap": "10px" } as React.CSSProperties} reversed>
+      <div className="card-head"><h2 id="up-h">Updates</h2></div>
+      <ol className="stack" style={{ listStyle: "none", padding: 0, margin: 0, "--gap": "12px" } as React.CSSProperties} reversed>
         {events.map((e, i) => (
           <li key={i} className="small">
+            <div style={{ fontWeight: 500 }}>{e.text.replace(/ against bank record \S+/, "")}</div>
             <time dateTime={e.at} className="muted">{fmtDateTime(e.at)}</time>
-            <div>{e.text}</div>
           </li>
         ))}
       </ol>

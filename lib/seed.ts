@@ -15,9 +15,10 @@ export function at(date: string, time: string) {
 }
 
 export const STAFF: StaffMember[] = [
-  { id: "ifeoma", name: "Ifeoma Obi", role: "Owner" },
-  { id: "bisi", name: "Bisi Lawal", role: "Coordinator" },
-  { id: "emeka", name: "Emeka Nnadi", role: "Production" },
+  // Free Unsplash photos (Unsplash License), used as placeholders for invented staff. Not real people of this business.
+  { id: "ifeoma", name: "Ifeoma Obi", role: "Owner", photo: "https://images.unsplash.com/photo-1598956066123-a6f006500ca4?w=128&h=128&fit=crop&crop=faces&q=80" },
+  { id: "bisi", name: "Bisi Lawal", role: "Coordinator", photo: "https://images.unsplash.com/photo-1602058746304-2aeebbef0462?w=128&h=128&fit=crop&crop=faces&q=80" },
+  { id: "emeka", name: "Emeka Nnadi", role: "Production", photo: "https://images.unsplash.com/photo-1522529599102-193c0d76b5b6?w=128&h=128&fit=crop&crop=faces&q=80" },
 ];
 
 export const SAMPLE_MESSAGE = `[31/10/2026, 19:42] Fola Adebayo: Good evening ma 🙏🏾

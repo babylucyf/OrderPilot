@@ -30,6 +30,7 @@ export type Action =
   | { type: "resolve_issue"; id: string; issueId: string; resolution: string; then?: Stage }
   | { type: "record_balance"; id: string; reference: string }
   | { type: "change_date"; id: string; date: string }
+  | { type: "assign"; ids: string[]; to: string }
   | { type: "set_clock"; now: string }
   | { type: "replace"; state: State }
   | { type: "reset" };
@@ -161,6 +162,18 @@ export function reducer(state: State, a: Action): State {
         o.fulfilment.date = a.date;
         event(o, now, `Fulfilment date proposed as ${a.date}`);
       });
+    case "assign":
+      return {
+        ...state,
+        version: state.version + 1,
+        orders: state.orders.map((o) => {
+          if (!a.ids.includes(o.id) || o.assignee === a.to) return o;
+          const copy: Order = structuredClone(o);
+          event(copy, now, `Assigned to ${a.to} (was ${o.assignee})`);
+          copy.assignee = a.to;
+          return copy;
+        }),
+      };
     case "set_clock":
       return { ...state, now: a.now, version: state.version + 1 };
     case "replace":

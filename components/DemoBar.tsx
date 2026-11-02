@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { fmtDate, lagosParts } from "@/lib/rules";
 
 export function DemoBar() {
   const { state, dispatch, afterClose, toggleClock } = useStore();
+  const path = usePathname();
+  if (path.startsWith("/owner")) return null; // the owner top bar carries these controls
   const p = lagosParts(state.now);
   return (
     <div className="demo-bar no-print" role="region" aria-label="Prototype controls">
@@ -16,7 +19,7 @@ export function DemoBar() {
       </span>
       <span className="row" style={{ "--gap": "8px" } as React.CSSProperties}>
         <span>
-          Demo clock: <span className="clock">{fmtDate(p.date)}, {p.time} Lagos</span>
+          <span className="demo-long">Demo clock: </span><span className="clock">{fmtDate(p.date)}, {p.time} Lagos</span>
         </span>
         <button type="button" onClick={toggleClock} aria-pressed={afterClose}>
           {afterClose ? "Back to 14:20" : "Jump past 17:00 closing"}
